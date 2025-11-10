@@ -50,6 +50,39 @@ The system generates anatomically consistent **baseline and follow-up** image pa
 
 - 🧾 **Segmentation + Classification Pipeline:**  
   Uses transformer-based CoTrSeg or nnU-Net style networks, then XGBoost classifier with radiomics & SMOTE.
+  ## 📂 Repository Structure
+
+```ruby
+pggan/
+├── config.py
+├── dataset.py
+├── networks.py
+├── train.py
+├── generate.py
+├── utils.py
+│
+├── saved256/                  # PGGAN checkpoints & sample images
+│   ├── samples/
+│   └── checkpoint_XXXk.pth
+│
+├── generated1070/             # GAN-generated 2-channel .npz data
+│   ├── 0/
+│   ├── 1/
+│   └── ...
+│
+├── CACHED128/                 # Real dataset (10-channel .npz)
+│   ├── 0/
+│   ├── 1/
+│   └── ...
+│
+models_cotrseg/                # Trained segmentation weights
+visualisation128aug/           # Synthetic inference results
+train_cotrseg.py
+dataset_seg_cotrseg.py
+model_cotrseg.py
+train_classifier_radiomics.py
+requirements.txt
+README.md
 
 ---
 
