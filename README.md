@@ -1,18 +1,19 @@
-# 🧠 Longitudinal Brain MRI Augmentation & Segmentation Pipeline
+/*
+# Longitudinal Brain MRI Augmentation & Segmentation Pipeline
 
-> **Two-Generator PGGAN → Synthetic Longitudinal MRI (Baseline + Follow-Up) → Segmentation → RANO Classification**
+> A Two-Generator PGGAN pipeline for synthetic longitudinal MRI generation, followed by 3D segmentation and RANO classification.
 
 ---
 
-## 📘 Table of Contents
+## Table of Contents
 - [Overview](#overview)
 - [Key Features](#key-features)
-- [Repository & Dataset Layout](#repository--dataset-layout)
-- [10-Channel `.npz` Mapping](#10-channel-npz-mapping)
-- [Quick Start](#quick-start)
-- [Pipeline Commands](#pipeline-commands)
+- [Repository Structure](#repository-structure)
+- [Dataset Format](#dataset-format)
+- [Installation](#installation)
+- [Usage: End-to-End Pipeline](#usage-end-to-end-pipeline)
 - [Configuration](#configuration)
-- [Output Folders Explained](#output-folders-explained)
+- [Output Directory Guide](#output-directory-guide)
 - [Tips & Notes](#tips--notes)
 - [Contributing](#contributing)
 - [License & Citation](#license--citation)
@@ -20,71 +21,78 @@
 
 ---
 
-## 🧩 Overview
+## Overview
 
-This project implements an end-to-end pipeline for augmenting **longitudinal brain MRI data** using a **Two-Generator Progressive GAN (PGGAN)**.  
-The system generates anatomically consistent **baseline and follow-up** image pairs that augment real data to improve **3D segmentation** and **RANO classification** performance.
+This project provides an end-to-end pipeline for augmenting **longitudinal brain MRI data** using a **Two-Generator Progressive GAN (PGGAN)**.
 
-### 🧠 End-to-End Flow
+The system generates anatomically consistent **baseline and follow-up** image pairs. This synthetic data is used to augment real, often limited, datasets to improve the performance of **3D segmentation** models and subsequent **RANO classification** models.
 
-1. **Preprocessed real data (`CACHED128`)** → train Two-Generator PGGAN  
-2. **Generate synthetic `.npz`** (baseline + follow-up) → stored in `generated1070`  
-3. **Train segmentation model** (`CoTrSeg`, `nnU-Net`, or `DynUNet`)  
-4. **Run inference on synthetic data** → create segmentation masks (`visualisation128aug`)  
-5. **Train RANO classifier** on combined real + synthetic dataset (with SMOTE + radiomics)
+### End-to-End Flow
+
+1.  **Train GAN:** The Two-Generator PGGAN is trained on preprocessed real data (from `CACHED128`).
+2.  **Generate Data:** The trained GAN generates synthetic `.npz` files (baseline + follow-up pairs) and saves them (to `generated1070`).
+3.  **Train Segmentation:** A segmentation model (e.g., `CoTrSeg`, `nnU-Net`, or `DynUNet`) is trained on the real data.
+4.  **Run Inference:** The trained segmentation model is used to create segmentation masks for the newly generated synthetic data (results in `visualisation1DigitalImageAug`).
+5.  **Train Classifier:** A RANO classifier is trained on a combined dataset of both real and synthetic images (with their corresponding masks), often using SMOTE and radiomics features.
 
 ---
 
-## ⚙️ Key Features
+## Key Features
 
-- 🧬 **Two Generators**  
-  - `G_B`: Baseline generator (z → baseline image)  
-  - `G_F`: Follow-up generator (z + baseline → follow-up), conditioned on baseline at every scale  
+* **Dual Generators:**
+    * `G_B`: Baseline generator (creates a baseline image from a latent vector `z`).
+    * `G_F`: Follow-up generator (creates a follow-up image from `z` + `baseline`). It is conditioned on the baseline image features at every scale to ensure consistency.
 
-- 🧩 **Two Discriminators:** `D_B` and `D_F` trained with **WGAN-GP**
+* **Dual Discriminators:**
+    * `D_B` and `D_F` are independent discriminators for baseline and follow-up images, trained with **WGAN-GP** for stability.
 
-- 🎯 **Hybrid Loss for Follow-Up Generator:**  
-  `Adversarial + λ₁·L1 + λ₂·SSIM` → enforces anatomical consistency over time
+* **Hybrid Temporal Loss:**
+    * The follow-up generator uses a combined loss (`Adversarial + λ₁·L1 + λ₂·SSIM`) to enforce anatomical consistency between the baseline and follow-up images.
 
-- 🧠 **Supports 3D MRI volumes** (`128×128×128`)
+* **3D Volume Support:**
+    * The entire pipeline is designed to work with 3D MRI volumes, specifically `128x128x128`.
 
-- 🧾 **Segmentation + Classification Pipeline:**  
-  Uses transformer-based CoTrSeg or nnU-Net style networks, then XGBoost classifier with radiomics & SMOTE.
-  ## 📂 Repository Structure
+* **Full Segmentation & Classification Pipeline:**
+    * Includes scripts for training transformer-based (CoTrSeg) or U-Net-style segmentation models.
+    * Includes a final classification script using an XGBoost classifier with radiomics features and SMOTE for class imbalance.
 
-```ruby
+---
+
+## Repository Structure
+
+```bash
 pggan/
-├── config.py
-├── dataset.py
-├── networks.py
-├── train.py
-├── generate.py
-├── utils.py
+├── config.py                 # Main configuration file for the GAN
+├── dataset.py                # Dataloader for GAN training
+├── networks.py               # PGGAN generator and discriminator models
+├── train.py                  # Main training script for the GAN
+├── generate.py               # Script to generate synthetic images from a checkpoint
+├── utils.py                  # Utility functions (losses, etc.)
 │
-├── saved256/                  # PGGAN checkpoints & sample images
+├── saved256/                 # Checkpoints and image samples from PGGAN training
 │   ├── samples/
 │   └── checkpoint_XXXk.pth
 │
-├── generated1070/             # GAN-generated 2-channel .npz data
+├── generated1070/            # Output directory for generated synthetic .npz files
 │   ├── 0/
 │   ├── 1/
 │   └── ...
 │
-├── CACHED128/                 # Real dataset (10-channel .npz)
+├── CACHED128/                # Preprocessed real dataset (10-channel .npz)
 │   ├── 0/
 │   ├── 1/
 │   └── ...
 │
-models_cotrseg/                # Trained segmentation weights
-visualisation128aug/           # Synthetic inference results
-train_cotrseg.py
-dataset_seg_cotrseg.py
-model_cotrseg.py
-train_classifier_radiomics.py
-requirements.txt
-README.md
-
----
+models_cotrseg/               # Saved weights from trained segmentation models
+visualisation1DigitalImageAug/          # Segmentation masks inferred on synthetic data
+│
+├── train_cotrseg.py          # Script to train the segmentation model
+├── dataset_seg_cotrseg.py    # Dataloader for segmentation
+├── model_cotrseg.py          # Segmentation model architecture
+├── train_classifier_radiomics.py # Script to train the final RANO classifier
+│
+├── requirements.txt
+└── README.md
 
 ## 📂 Repository & Dataset Layout
 # 🧾 10-Channel .npz Mapping
